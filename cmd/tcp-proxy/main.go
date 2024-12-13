@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	hx "encoding/hex"
 	"flag"
 	"fmt"
 	"net"
@@ -8,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	proxy "github.com/jpillora/go-tcp-proxy"
+	proxy "github.com/sanderzegers/go-tcp-proxy"
 )
 
 var (
@@ -27,6 +29,7 @@ var (
 	unwrapTLS   = flag.Bool("unwrap-tls", false, "remote connection with TLS exposed unencrypted locally")
 	match       = flag.String("match", "", "match regex (in the form 'regex')")
 	replace     = flag.String("replace", "", "replace regex (in the form 'regex~replacer')")
+	binReplace  = flag.String("binreplace", "", "replace binary (in the form '20a4f3~20a500)")
 )
 
 func main() {
@@ -57,6 +60,7 @@ func main() {
 
 	matcher := createMatcher(*match)
 	replacer := createReplacer(*replace)
+	binReplacer := createBinReplacer(*binReplace)
 
 	if *veryverbose {
 		*verbose = true
@@ -79,7 +83,12 @@ func main() {
 		}
 
 		p.Matcher = matcher
-		p.Replacer = replacer
+		switch {
+		case *replace != "":
+			p.Replacer = replacer
+		case *binReplace != "":
+			p.Replacer = binReplacer
+		}
 
 		p.Nagles = *nagles
 		p.OutputHex = *hex
@@ -136,5 +145,58 @@ func createReplacer(replace string) func([]byte) []byte {
 	logger.Info("Replacing %s with %s", re.String(), repl)
 	return func(input []byte) []byte {
 		return re.ReplaceAll(input, repl)
+	}
+}
+
+func createBinReplacer(replace string) func([]byte) []byte {
+	if replace == "" {
+		return nil
+	}
+
+	stringParts := strings.Split(replace, "~")
+	if len(stringParts) != 2 {
+		logger.Warn("Invalid replace option")
+		return nil
+	}
+
+	part := make([][]byte, 2)
+	var err error
+
+	part[0], err = hx.DecodeString(stringParts[0])
+
+	if err != nil {
+		logger.Warn("Invalid createBinReplacer 1st argument", err)
+		return nil
+	}
+
+	part[1], err = hx.DecodeString(stringParts[1])
+
+	if err != nil {
+		logger.Warn("Invalid createBinReplacer 2nd argument", err)
+		return nil
+	}
+
+	logger.Info("Binary Replacing %s with %s", stringParts[0], stringParts[1])
+	return func(input []byte) []byte {
+		var result []byte
+		start := 0
+		for {
+			// Find the next occurrence of the search pattern
+			index := bytes.Index(input[start:], part[0])
+			if index == -1 {
+				break
+			}
+
+			// Append the part before the match and the replacement
+			result = append(result, input[start:start+index]...)
+			result = append(result, part[1]...)
+
+			// Move the start position past the matched segment
+			start += index + len(part[0])
+		}
+
+		// Append the remaining part of the array
+		result = append(result, input[start:]...)
+		return result
 	}
 }
