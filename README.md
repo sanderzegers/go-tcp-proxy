@@ -30,6 +30,7 @@ Usage of tcp-proxy:
   -r="localhost:80": remote address
   -match="": match regex (in the form 'regex')
   -replace="": replace regex (in the form 'regex~replacer')
+  -binreplace="": replace binary (in the form 'binsearch~binreplace')
   -v: display server actions
   -vv: display server actions and all tcp data
 ```
@@ -86,6 +87,14 @@ Replacing "ip": "([^"]+)" with "ip": "REDACTED"
 ```
 
 *Note: The `-replace` option is in the form `regex~replacer`. Where `replacer` may contain `$N` to substitute in group `N`.*
+
+### Binary replace Example
+
+```
+$ tcp-proxy -r echo.jpillora.com:80 -binreplace 0353454C~4C45345220
+Proxying from localhost:9999 to echo.jpillora.com:80
+Replacing 0353454C with 4C45345220
+```
 
 ### Todo
 
